@@ -428,3 +428,12 @@ class StatsView(APIView):
             'dailyDeliveries': f'{daily_deliveries}+' if daily_deliveries > 0 else '0',
             'onTimeRate': f'{on_time_rate}%',
         })
+
+
+class DeleteAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request):
+        user = request.user
+        user.delete()
+        return Response({'success': True, 'message': 'Account deleted permanently.'})

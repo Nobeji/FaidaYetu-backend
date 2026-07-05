@@ -7,6 +7,7 @@ urlpatterns = [
     path('api/auth/login/', views.LoginView.as_view(), name='login'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/profile/', views.ProfileView.as_view(), name='profile'),
+    path('api/auth/delete-account/', views.DeleteAccountView.as_view(), name='delete-account'),
 
     path('api/suppliers/', views.SupplierListView.as_view(), name='supplier-list'),
     path('api/suppliers/<int:pk>/', views.SupplierDetailView.as_view(), name='supplier-detail'),
