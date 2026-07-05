@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
@@ -14,6 +15,14 @@ from .services import ClickPesaService
 def _make_order_ref(order_id):
     return f'FAIDA-{order_id}-{uuid.uuid4().hex[:6].upper()}'
 
+def _normalize_phone(phone):
+    phone = re.sub(r'[^0-9]', '', phone)
+    if phone.startswith('0'):
+        phone = '255' + phone[1:]
+    elif not phone.startswith('255'):
+        phone = '255' + phone
+    return phone
+
 class InitiatePaymentView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -23,7 +32,7 @@ class InitiatePaymentView(APIView):
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
         order_id = ser.validated_data['order_id']
-        phone = ser.validated_data['phone']
+        phone = _normalize_phone(ser.validated_data['phone'])
 
         try:
             order = Order.objects.get(id=order_id)
