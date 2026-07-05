@@ -69,7 +69,8 @@ class InitiatePaymentView(APIView):
                 payment.save()
                 return Response({'error': result['error']}, status=400)
 
-            payment.clickpesa_ref = result.get('reference', result.get('transactionId', ''))
+            payment.clickpesa_ref = result.get('id', '')
+            payment.message = result.get('status', 'PROCESSING')
             payment.save()
 
             return Response({
