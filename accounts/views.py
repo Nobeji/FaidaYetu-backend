@@ -262,6 +262,17 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.AllowAny]
 
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        old_status = instance.status
+        new_status = self.request.data.get('status', old_status)
+        if old_status != new_status and new_status == 'cancelled' and instance.status in ('paid', 'processing', 'ready'):
+            for item in instance.items.all():
+                product = item.product
+                product.stock += item.quantity
+                product.save()
+        serializer.save()
+
 # --- Dashboard data views ---
 class SupplierDashboardView(APIView):
     permission_classes = [permissions.AllowAny]

@@ -110,7 +110,11 @@ def payment_webhook(request):
     if status_val in ('completed', 'success'):
         payment.status = 'completed'
         payment.message = data.get('message', 'Payment completed')
-        payment.order.status = 'processing'
+        for item in payment.order.items.all():
+            product = item.product
+            product.stock = max(0, product.stock - item.quantity)
+            product.save()
+        payment.order.status = 'ready'
         payment.order.save()
     elif status_val in ('failed', 'cancelled', 'expired'):
         payment.status = 'failed'

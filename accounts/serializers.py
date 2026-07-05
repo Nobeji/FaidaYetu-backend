@@ -76,6 +76,7 @@ class OrderSerializer(serializers.ModelSerializer):
     delivery_status = serializers.SerializerMethodField()
     delivery_id = serializers.SerializerMethodField()
     paid = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
     items_data = OrderItemWriteSerializer(many=True, write_only=True)
 
     class Meta:
@@ -95,8 +96,19 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_paid(self, obj):
         return obj.payments.filter(status='completed').exists()
 
+    def get_payment_status(self, obj):
+        latest = obj.payments.order_by('-created_at').first()
+        return latest.status if latest else None
+
     def create(self, validated_data):
         items_data = validated_data.pop('items_data', [])
+        for item in items_data:
+            product = item['product']
+            qty = item.get('quantity', 1)
+            if product.stock < qty:
+                raise serializers.ValidationError(
+                    f'Insufficient stock for {product.name}. Available: {product.stock}, requested: {qty}'
+                )
         order = Order.objects.create(**validated_data)
         for item in items_data:
             OrderItem.objects.create(order=order, **item)

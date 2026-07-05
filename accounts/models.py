@@ -83,6 +83,7 @@ class Product(models.Model):
 class Order(models.Model):
     STATUS_CHOICES = [
         ('new', 'New'),
+        ('paid', 'Paid'),
         ('processing', 'Processing'),
         ('ready', 'Ready'),
         ('in_transit', 'In Transit'),
