@@ -46,4 +46,9 @@ urlpatterns = [
     path('api/dashboard/customer/<int:customer_id>/', views.CustomerDashboardView.as_view(), name='customer-dashboard'),
     path('api/dashboard/delivery/<int:delivery_id>/', views.DeliveryDashboardView.as_view(), name='delivery-dashboard'),
     path('api/stats/', views.StatsView.as_view(), name='stats'),
+
+    # Notification endpoints
+    path('api/notifications/', views.NotificationListView.as_view(), name='notification-list'),
+    path('api/notifications/<int:pk>/read/', views.MarkNotificationReadView.as_view(), name='notification-read'),
+    path('api/notifications/read-all/', views.MarkAllNotificationsReadView.as_view(), name='notification-read-all'),
 ]

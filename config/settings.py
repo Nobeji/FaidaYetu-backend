@@ -28,6 +28,11 @@ INSTALLED_APPS = [
 CLICKPESA_API_KEY = os.environ.get('CLICKPESA_API_KEY', '')
 CLICKPESA_CLIENT_ID = os.environ.get('CLICKPESA_CLIENT_ID', '')
 
+# Africa's Talking SMS
+AT_API_KEY = os.environ.get('AT_API_KEY', '')
+AT_USERNAME = os.environ.get('AT_USERNAME', 'sandbox')
+AT_SENDER_ID = os.environ.get('AT_SENDER_ID', 'FaidaYetu')
+
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'c1htjw5d')
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '524462732135327')
 CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', 'TfqyNmT_Kj8j35t_kgvFIWsE6Ms')

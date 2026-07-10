@@ -448,3 +448,66 @@ class DeleteAccountView(APIView):
         user = request.user
         user.delete()
         return Response({'success': True, 'message': 'Account deleted permanently.'})
+
+
+# --- Notification endpoints ---
+class NotificationListView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        supplier_id = request.query_params.get('supplier_id')
+        unread_only = request.query_params.get('unread', 'false') == 'true'
+
+        if supplier_id:
+            from .models import Supplier
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                profile = supplier.profile
+            except Supplier.DoesNotExist:
+                return Response({'error': 'Supplier not found'}, status=404)
+        elif request.user.is_authenticated:
+            profile = request.user.profile
+        else:
+            return Response({'error': 'Authentication required or supplier_id needed'}, status=401)
+
+        from .notifications import get_supplier_notifications
+        qs = get_supplier_notifications(profile, unread_only=unread_only)
+        from .serializers import NotificationSerializer
+        data = NotificationSerializer(qs[:50], many=True).data
+        unread_count = get_supplier_notifications(profile, unread_only=True).count()
+        return Response({
+            'notifications': data,
+            'unread_count': unread_count,
+        })
+
+
+class MarkNotificationReadView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def patch(self, request, pk):
+        if request.user.is_authenticated:
+            profile = request.user.profile
+        else:
+            return Response({'error': 'Authentication required'}, status=401)
+
+        from .notifications import mark_notification_read
+        notification = mark_notification_read(pk, profile)
+        if not notification:
+            return Response({'error': 'Notification not found'}, status=404)
+
+        from .serializers import NotificationSerializer
+        return Response(NotificationSerializer(notification).data)
+
+
+class MarkAllNotificationsReadView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def patch(self, request):
+        if request.user.is_authenticated:
+            profile = request.user.profile
+        else:
+            return Response({'error': 'Authentication required'}, status=401)
+
+        from .notifications import mark_all_read
+        mark_all_read(profile)
+        return Response({'success': True, 'message': 'All notifications marked as read.'})

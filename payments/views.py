@@ -116,6 +116,13 @@ def payment_webhook(request):
             product.save()
         payment.order.status = 'ready'
         payment.order.save()
+
+        try:
+            from accounts.notifications import notify_supplier
+            notify_supplier(payment.order)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f'Failed to notify supplier: {e}')
     elif status_val in ('failed', 'cancelled', 'expired'):
         payment.status = 'failed'
         payment.message = data.get('message', 'Payment failed')
