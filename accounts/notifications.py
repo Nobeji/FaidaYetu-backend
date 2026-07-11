@@ -20,11 +20,16 @@ def notify_supplier(order):
     profile = supplier.profile
     items_text = format_order_items(order)
 
+    cust = order.customer
+    cust_phone = cust.profile.phone
+    delivery_addr = order.delivery_address or 'Haijabainishwa'
+
     title = 'Malipo yamekamilika'
     message = (
-        f'Malipo yamethibitishwa. Mteja {order.customer.profile.user.username} '
-        f'amelipa TZS {order.total:,.0f} kwa bidhaa za {items_text}. '
-        f'Order No {order.id} tafadhali tayarisha bidhaa kwa usafirishaji - FaidaYetu'
+        f'Malipo yamethibitishwa. Mteja {cust.profile.user.username} '
+        f'({cust_phone}) amelipa TZS {order.total:,.0f} kwa bidhaa za {items_text}. '
+        f'Order No {order.id}. Mahala pa kusafirishia: {delivery_addr}. '
+        f'Tafadhali tayarisha bidhaa kwa usafirishaji - FaidaYetu'
     )
 
     notification = Notification.objects.create(
