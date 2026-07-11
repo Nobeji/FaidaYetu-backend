@@ -184,8 +184,9 @@ class VerifyPaymentView(APIView):
                     from accounts.notifications import notify_customer, notify_supplier
                     notify_customer(payment.order)
                     notify_supplier(payment.order)
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f'VerifyPayment notify failed: {e}')
                 return Response({'paid': True, 'message': 'Payment confirmed via ClickPesa'})
             elif clickpesa_status in ('failed', 'cancelled', 'expired'):
                 payment.status = 'failed'
@@ -235,7 +236,8 @@ class ManualConfirmPaymentView(APIView):
             from accounts.notifications import notify_customer, notify_supplier
             notify_customer(payment.order)
             notify_supplier(payment.order)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f'ManualConfirmPayment notify failed: {e}')
 
         return Response({'paid': True, 'message': 'Payment manually confirmed'})
