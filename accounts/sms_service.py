@@ -31,7 +31,7 @@ class SmsService:
             sms = africastalking.SMS
             response = sms.send(message, [to_number], self.sender_id)
             recipients = response.get('SMSMessageData', {}).get('Recipients', [])
-            if recipients and recipients[0].get('statusCode') == 101:
+            if recipients and recipients[0].get('statusCode') in (100, 101):
                 logger.info(f'SMS sent successfully to {to_number}')
                 return True
             logger.warning(f'Africa\'s Talking SMS failed: {recipients}')
