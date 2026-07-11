@@ -27,6 +27,8 @@ class RegisterView(generics.CreateAPIView):
         password = request.data.get('password')
         role = request.data.get('role', 'customer')
         phone = request.data.get('phone', '')
+        area = request.data.get('area', '')
+        city = request.data.get('city', '')
         lat = request.data.get('lat')
         lng = request.data.get('lng')
 
@@ -39,6 +41,8 @@ class RegisterView(generics.CreateAPIView):
         profile = user.profile
         profile.role = role
         profile.phone = phone
+        profile.area = area
+        profile.city = city
         if lat is not None:
             profile.lat = float(lat)
         if lng is not None:
@@ -136,7 +140,11 @@ class ProfileView(APIView):
             profile.lat = data['lat']
         if 'lng' in data:
             profile.lng = data['lng']
-        if 'phone' in data or 'lat' in data or 'lng' in data:
+        if 'area' in data:
+            profile.area = data['area']
+        if 'city' in data:
+            profile.city = data['city']
+        if 'phone' in data or 'lat' in data or 'lng' in data or 'area' in data or 'city' in data:
             profile.save()
 
         if profile.role == 'supplier' and hasattr(profile, 'supplier'):

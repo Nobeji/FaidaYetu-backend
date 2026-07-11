@@ -35,6 +35,8 @@ class Profile(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     lat = models.FloatField(default=-6.7924)
     lng = models.FloatField(default=39.2083)
+    area = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return f'{self.user.username} ({self.role})'
@@ -117,6 +119,9 @@ class Order(models.Model):
     delivery_lat = models.FloatField(default=-6.7924)
     delivery_lng = models.FloatField(default=39.2083)
     delivery_address = models.CharField(max_length=255, blank=True)
+    delivery_area = models.CharField(max_length=255, blank=True)
+    delivery_street = models.CharField(max_length=255, blank=True)
+    delivery_city = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

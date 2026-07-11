@@ -12,7 +12,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ['id', 'user', 'role', 'phone', 'lat', 'lng']
+        fields = ['id', 'user', 'role', 'phone', 'lat', 'lng', 'area', 'city']
 
 class SupplierSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
@@ -50,6 +50,8 @@ class ProfileUpdateSerializer(serializers.Serializer):
     phone = serializers.CharField(required=False)
     lat = serializers.FloatField(required=False)
     lng = serializers.FloatField(required=False)
+    area = serializers.CharField(required=False)
+    city = serializers.CharField(required=False)
     business_name = serializers.CharField(required=False)
     business_email = serializers.EmailField(required=False)
     address = serializers.CharField(required=False)
