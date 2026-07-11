@@ -91,13 +91,18 @@ def payment_webhook(request):
         return HttpResponse(status=405)
 
     try:
-        data = json.loads(request.body)
+        payload = json.loads(request.body)
     except json.JSONDecodeError:
         return HttpResponse(status=400)
 
+    # ClickPesa wraps the actual payment fields inside a "data" object, e.g:
+    # {"event": "PAYMENT RECEIVED", "data": {"orderReference": ..., "status": ...}}
+    # See https://docs.clickpesa.com/home/webhooks
+    data = payload.get('data', payload)
+
     order_ref = data.get('orderReference') or data.get('externalId')
-    status_val = data.get('status', '').lower()
-    clickpesa_ref = data.get('reference') or data.get('transactionId', '')
+    status_val = (data.get('status') or '').lower()
+    clickpesa_ref = data.get('paymentReference') or data.get('id') or data.get('transactionId', '')
 
     if not order_ref:
         return JsonResponse({'error': 'Missing orderReference'}, status=400)
@@ -107,7 +112,7 @@ def payment_webhook(request):
     except Payment.DoesNotExist:
         return JsonResponse({'error': 'Payment not found'}, status=404)
 
-    if status_val in ('completed', 'success'):
+    if status_val in ('completed', 'success', 'settled'):
         payment.status = 'completed'
         payment.message = data.get('message', 'Payment completed')
         for item in payment.order.items.all():
@@ -166,11 +171,13 @@ class VerifyPaymentView(APIView):
         svc = ClickPesaService()
         try:
             result = svc.check_status(payment.order_ref)
+            if result.get('error') == 'not_found':
+                return Response({'paid': False, 'status': 'pending', 'message': 'Payment not found yet on ClickPesa'})
             if 'error' in result:
                 return Response({'error': result['error']}, status=400)
 
             clickpesa_status = (result.get('status') or '').lower()
-            if clickpesa_status in ('completed', 'success', 'paid'):
+            if clickpesa_status in ('completed', 'success', 'paid', 'settled'):
                 payment.status = 'completed'
                 payment.message = 'Verified via ClickPesa status check'
                 payment.save()
