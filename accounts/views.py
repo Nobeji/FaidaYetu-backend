@@ -49,17 +49,21 @@ class RegisterView(generics.CreateAPIView):
             profile.lng = float(lng)
         profile.save()
 
+        extra = {}
         if role == 'supplier':
-            Supplier.objects.create(
+            supplier = Supplier.objects.create(
                 profile=profile,
                 business_name=request.data.get('business_name', username),
                 business_email=email,
                 address=request.data.get('address', ''),
             )
+            extra['supplier'] = SupplierSerializer(supplier).data
         elif role == 'customer':
-            Customer.objects.create(profile=profile)
+            customer = Customer.objects.create(profile=profile)
+            extra['customer'] = CustomerSerializer(customer).data
         elif role == 'delivery':
-            DeliveryPerson.objects.create(profile=profile)
+            dp = DeliveryPerson.objects.create(profile=profile)
+            extra['delivery_person'] = DeliveryPersonSerializer(dp).data
 
         refresh = RefreshToken.for_user(user)
         return Response({
@@ -67,6 +71,7 @@ class RegisterView(generics.CreateAPIView):
             'profile': ProfileSerializer(profile).data,
             'access': str(refresh.access_token),
             'refresh': str(refresh),
+            **extra,
         }, status=201)
 
 class LoginView(APIView):
