@@ -28,7 +28,12 @@ INSTALLED_APPS = [
 CLICKPESA_API_KEY = os.environ.get('CLICKPESA_API_KEY', '')
 CLICKPESA_CLIENT_ID = os.environ.get('CLICKPESA_CLIENT_ID', '')
 
-# SMS - ehub.co.tz
+# SMS - Africa's Talking (primary) / ehub.co.tz (deprecated)
+AFRICASTALKING_USERNAME = os.environ.get('AFRICASTALKING_USERNAME', '')
+AFRICASTALKING_API_KEY = os.environ.get('AFRICASTALKING_API_KEY', '')
+AFRICASTALKING_SENDER_ID = os.environ.get('AFRICASTALKING_SENDER_ID', 'FaidaYetu')
+
+# Legacy ehub (not used)
 EHUB_API_KEY = os.environ.get('EHUB_API_KEY', '')
 EHUB_API_SECRET = os.environ.get('EHUB_API_SECRET', '')
 EHUB_SENDER_ID = os.environ.get('EHUB_SENDER_ID', 'PROMOTION')

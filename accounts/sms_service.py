@@ -1,54 +1,41 @@
-import json
 import logging
-import re
-import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
-
-SMS_API_URL = 'https://api.ehub.co.tz/v1/sms'
 
 
 class SmsService:
 
     def __init__(self):
-        self.api_key = getattr(settings, 'EHUB_API_KEY', '')
-        self.sender_id = getattr(settings, 'EHUB_SENDER_ID', 'PROMOTION')
+        self.username = getattr(settings, 'AFRICASTALKING_USERNAME', '')
+        self.api_key = getattr(settings, 'AFRICASTALKING_API_KEY', '')
+        self.sender_id = getattr(settings, 'AFRICASTALKING_SENDER_ID', 'FaidaYetu')
 
     def send(self, phone, message):
-        if not self.api_key:
-            logger.warning('EHUB_API_KEY not configured. SMS not sent.')
+        if not self.username or not self.api_key:
+            logger.warning('Africa\'s Talking credentials not configured. SMS not sent.')
             return False
 
+        import re
         phone = re.sub(r'[^0-9]', '', phone)
         if phone.startswith('0'):
             phone = '255' + phone[1:]
         elif not phone.startswith('255'):
             phone = '255' + phone
 
-        payload = {
-            'from': self.sender_id,
-            'to': f'+{phone}',
-            'text': message,
-        }
-
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-        }
+        to_number = f'+{phone}'
 
         try:
-            resp = requests.post(
-                SMS_API_URL,
-                headers=headers,
-                json=payload,
-                timeout=15,
-            )
-            if resp.ok:
-                logger.info(f'SMS sent successfully to {phone}')
+            import africastalking
+            africastalking.initialize(self.username, self.api_key)
+            sms = africastalking.SMS
+            response = sms.send(message, [to_number], self.sender_id)
+            recipients = response.get('SMSMessageData', {}).get('Recipients', [])
+            if recipients and recipients[0].get('statusCode') == 101:
+                logger.info(f'SMS sent successfully to {to_number}')
                 return True
-            logger.warning(f'SMS API returned {resp.status_code}: {resp.text[:200]}')
-        except requests.RequestException as e:
-            logger.warning(f'SMS API failed: {e}')
-
-        return False
+            logger.warning(f'Africa\'s Talking SMS failed: {recipients}')
+            return False
+        except Exception as e:
+            logger.warning(f'Africa\'s Talking SMS error: {e}')
+            return False
