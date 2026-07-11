@@ -150,3 +150,92 @@ class PaymentStatusView(APIView):
             'status': latest.status,
             'payments': ser.data,
         })
+
+class VerifyPaymentView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, order_id):
+        payments = Payment.objects.filter(order_id=order_id, status='pending').order_by('-created_at')
+        if not payments.exists():
+            return Response({'paid': True, 'message': 'No pending payments found'})
+
+        payment = payments.first()
+        if not payment.order_ref:
+            return Response({'error': 'No order reference for this payment'}, status=400)
+
+        svc = ClickPesaService()
+        try:
+            result = svc.check_status(payment.order_ref)
+            if 'error' in result:
+                return Response({'error': result['error']}, status=400)
+
+            clickpesa_status = (result.get('status') or '').lower()
+            if clickpesa_status in ('completed', 'success', 'paid'):
+                payment.status = 'completed'
+                payment.message = 'Verified via ClickPesa status check'
+                payment.save()
+                for item in payment.order.items.all():
+                    product = item.product
+                    product.stock = max(0, product.stock - item.quantity)
+                    product.save()
+                payment.order.status = 'ready'
+                payment.order.save()
+                try:
+                    from accounts.notifications import notify_customer, notify_supplier
+                    notify_customer(payment.order)
+                    notify_supplier(payment.order)
+                except Exception:
+                    pass
+                return Response({'paid': True, 'message': 'Payment confirmed via ClickPesa'})
+            elif clickpesa_status in ('failed', 'cancelled', 'expired'):
+                payment.status = 'failed'
+                payment.save()
+                return Response({'paid': False, 'status': 'failed', 'message': 'Payment failed on ClickPesa'})
+            else:
+                return Response({'paid': False, 'status': 'pending', 'message': 'Payment still pending on ClickPesa'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+class ManualConfirmPaymentView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, order_id):
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=404)
+
+        payment = Payment.objects.filter(order_id=order_id, status='pending').first()
+        if not payment:
+            existing = Payment.objects.filter(order_id=order_id, status='completed').first()
+            if existing:
+                return Response({'paid': True, 'message': 'Order already paid'})
+            payment = Payment.objects.create(
+                order=order,
+                amount=order.total,
+                status='completed',
+                message='Manually confirmed by supplier',
+            )
+
+        if payment.status == 'completed':
+            return Response({'paid': True, 'message': 'Payment already completed'})
+
+        payment.status = 'completed'
+        payment.message = 'Manually confirmed by supplier'
+        payment.save()
+
+        for item in payment.order.items.all():
+            product = item.product
+            product.stock = max(0, product.stock - item.quantity)
+            product.save()
+        payment.order.status = 'ready'
+        payment.order.save()
+
+        try:
+            from accounts.notifications import notify_customer, notify_supplier
+            notify_customer(payment.order)
+            notify_supplier(payment.order)
+        except Exception:
+            pass
+
+        return Response({'paid': True, 'message': 'Payment manually confirmed'})
