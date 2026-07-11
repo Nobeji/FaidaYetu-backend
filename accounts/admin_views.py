@@ -799,3 +799,71 @@ class NetworkGraphView(APIView):
             'nodes': nodes,
             'edges': edges[:200],
         })
+
+
+# ========== 11. Supplier Payouts ==========
+
+class SupplierPayoutView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from datetime import date, timedelta
+        from django.db.models import Count, Sum, Q
+
+        # Date filter (default: last 30 days)
+        days = int(request.query_params.get('days', 30))
+        since = datetime.now() - timedelta(days=days)
+
+        suppliers = Supplier.objects.all()
+        results = []
+
+        for s in suppliers:
+            # All orders in period
+            all_orders = s.orders.filter(created_at__gte=since)
+            total_orders = all_orders.count()
+
+            # Delivered orders (payable)
+            delivered_orders = all_orders.filter(status='delivered')
+            delivered_count = delivered_orders.count()
+            delivered_revenue = delivered_orders.aggregate(s=Sum('total'))['s'] or 0
+
+            # Pending orders (paid but not delivered)
+            pending_orders = all_orders.filter(status__in=['paid', 'processing', 'ready'])
+            pending_count = pending_orders.count()
+            pending_revenue = pending_orders.aggregate(s=Sum('total'))['s'] or 0
+
+            # Cancelled
+            cancelled_orders = all_orders.filter(status='cancelled')
+            cancelled_count = cancelled_orders.count()
+
+            # Order breakdown
+            order_list = []
+            for o in all_orders.order_by('-created_at')[:20]:
+                order_list.append({
+                    'id': o.id,
+                    'status': o.status,
+                    'total': float(o.total),
+                    'created_at': o.created_at.isoformat(),
+                    'items': [
+                        {'name': i.product.name, 'qty': i.quantity, 'price': float(i.price)}
+                        for i in o.items.all()
+                    ],
+                })
+
+            results.append({
+                'supplier_id': s.id,
+                'business_name': s.business_name,
+                'total_orders': total_orders,
+                'delivered_count': delivered_count,
+                'delivered_revenue': float(delivered_revenue),
+                'pending_count': pending_count,
+                'pending_revenue': float(pending_revenue),
+                'cancelled_count': cancelled_count,
+                'payout_amount': float(delivered_revenue),  # what they should be paid
+                'orders': order_list,
+            })
+
+        return Response({
+            'period_days': days,
+            'suppliers': results,
+        })

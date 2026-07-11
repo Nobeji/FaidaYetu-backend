@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/admin/model-evaluation/', admin_views.ModelEvaluationView.as_view(), name='admin-model-eval'),
     path('api/admin/what-if-simulator/', admin_views.WhatIfSimulatorView.as_view(), name='admin-whatif'),
     path('api/admin/network-graph/', admin_views.NetworkGraphView.as_view(), name='admin-network'),
+    path('api/admin/supplier-payouts/', admin_views.SupplierPayoutView.as_view(), name='admin-supplier-payouts'),
     path('api/admin/<str:model_type>/', admin_views.AdminListView.as_view(), name='admin-list'),
 
     path('api/dashboard/supplier/<int:supplier_id>/', views.SupplierDashboardView.as_view(), name='supplier-dashboard'),
