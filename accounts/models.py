@@ -3,6 +3,25 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+
+class Notification(models.Model):
+    supplier = models.ForeignKey('Supplier', on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
+    customer = models.ForeignKey('Customer', on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        if self.supplier:
+            return f'{self.title} - {self.supplier.business_name}'
+        if self.customer:
+            return f'{self.title} - {self.customer.profile.user.username}'
+        return self.title
+
 ROLE_CHOICES = [
     ('admin', 'Admin'),
     ('customer', 'Customer'),

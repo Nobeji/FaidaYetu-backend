@@ -7,13 +7,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Profile, Supplier, Customer, DeliveryPerson, Product, Order
+from .models import Notification, Profile, Supplier, Customer, DeliveryPerson, Product, Order
 from deliveries.models import Delivery
 from .cloudinary_utils import upload_image
 from .serializers import (
     UserSerializer, ProfileSerializer, ProfileUpdateSerializer, SupplierSerializer,
     ProductSerializer, OrderSerializer, OrderItemSerializer,
-    DeliveryPersonSerializer, CustomerSerializer,
+    DeliveryPersonSerializer, CustomerSerializer, NotificationSerializer,
 )
 
 class RegisterView(generics.CreateAPIView):
@@ -448,3 +448,45 @@ class DeleteAccountView(APIView):
         user = request.user
         user.delete()
         return Response({'success': True, 'message': 'Account deleted permanently.'})
+
+
+class SupplierNotificationsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, supplier_id):
+        notifications = Notification.objects.filter(supplier_id=supplier_id)
+        unread_count = notifications.filter(read=False).count()
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response({
+            'notifications': serializer.data,
+            'unread_count': unread_count,
+        })
+
+    def patch(self, request, supplier_id):
+        notification_id = request.data.get('notification_id')
+        if notification_id:
+            Notification.objects.filter(id=notification_id, supplier_id=supplier_id).update(read=True)
+        else:
+            Notification.objects.filter(supplier_id=supplier_id, read=False).update(read=True)
+        return Response({'success': True})
+
+
+class CustomerNotificationsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, customer_id):
+        notifications = Notification.objects.filter(customer_id=customer_id)
+        unread_count = notifications.filter(read=False).count()
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response({
+            'notifications': serializer.data,
+            'unread_count': unread_count,
+        })
+
+    def patch(self, request, customer_id):
+        notification_id = request.data.get('notification_id')
+        if notification_id:
+            Notification.objects.filter(id=notification_id, customer_id=customer_id).update(read=True)
+        else:
+            Notification.objects.filter(customer_id=customer_id, read=False).update(read=True)
+        return Response({'success': True})

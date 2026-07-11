@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Profile, Supplier, Customer, DeliveryPerson, Product, Order, OrderItem
+from .models import Notification, Profile, Supplier, Customer, DeliveryPerson, Product, Order, OrderItem
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -113,3 +113,8 @@ class OrderSerializer(serializers.ModelSerializer):
         for item in items_data:
             OrderItem.objects.create(order=order, **item)
         return order
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
