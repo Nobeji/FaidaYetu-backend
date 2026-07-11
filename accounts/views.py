@@ -477,6 +477,7 @@ class NotificationListView(APIView):
             try:
                 supplier = Supplier.objects.get(id=supplier_id)
                 profile = supplier.profile
+                profile_type = 'supplier'
             except Supplier.DoesNotExist:
                 return Response({'error': 'Supplier not found'}, status=404)
         elif customer_id:
@@ -484,18 +485,24 @@ class NotificationListView(APIView):
             try:
                 customer = Customer.objects.get(id=customer_id)
                 profile = customer.profile
+                profile_type = 'customer'
             except Customer.DoesNotExist:
                 return Response({'error': 'Customer not found'}, status=404)
         elif request.user.is_authenticated:
             profile = request.user.profile
+            profile_type = 'supplier' if profile.role == 'supplier' else 'customer'
         else:
             return Response({'error': 'Authentication required or supplier_id/customer_id needed'}, status=401)
 
-        from .notifications import get_supplier_notifications
-        qs = get_supplier_notifications(profile, unread_only=unread_only)
+        from .notifications import get_supplier_notifications, get_customer_notifications
+        if profile_type == 'supplier':
+            qs = get_supplier_notifications(profile, unread_only=unread_only)
+            unread_count = get_supplier_notifications(profile, unread_only=True).count()
+        else:
+            qs = get_customer_notifications(profile, unread_only=unread_only)
+            unread_count = get_customer_notifications(profile, unread_only=True).count()
         from .serializers import NotificationSerializer
         data = NotificationSerializer(qs[:50], many=True).data
-        unread_count = get_supplier_notifications(profile, unread_only=True).count()
         return Response({
             'notifications': data,
             'unread_count': unread_count,

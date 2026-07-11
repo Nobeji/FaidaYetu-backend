@@ -110,6 +110,13 @@ def get_supplier_notifications(supplier_profile, unread_only=False):
     return qs
 
 
+def get_customer_notifications(customer_profile, unread_only=False):
+    qs = Notification.objects.filter(recipient=customer_profile)
+    if unread_only:
+        qs = qs.filter(is_read=False)
+    return qs
+
+
 def mark_notification_read(notification_id, profile):
     try:
         notification = Notification.objects.get(id=notification_id, recipient=profile)
