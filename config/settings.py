@@ -28,9 +28,11 @@ INSTALLED_APPS = [
 CLICKPESA_API_KEY = os.environ.get('CLICKPESA_API_KEY', '')
 CLICKPESA_CLIENT_ID = os.environ.get('CLICKPESA_CLIENT_ID', '')
 
+# SMS - ehub.co.tz
 EHUB_API_KEY = os.environ.get('EHUB_API_KEY', '')
 EHUB_API_SECRET = os.environ.get('EHUB_API_SECRET', '')
 EHUB_SENDER_ID = os.environ.get('EHUB_SENDER_ID', 'PROMOTION')
+AT_SENDER_ID = os.environ.get('AT_SENDER_ID', 'FaidaYetu')
 
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'c1htjw5d')
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '524462732135327')

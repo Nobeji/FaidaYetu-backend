@@ -7,11 +7,10 @@ from django.http import JsonResponse, HttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
-from accounts.models import Notification, Order
+from accounts.models import Order
 from .models import Payment
 from .serializers import InitiatePaymentSerializer, PaymentSerializer
 from .services import ClickPesaService
-from .sms_service import send_sms
 
 def _make_order_ref(order_id):
     return f'FAIDA{order_id}{uuid.uuid4().hex[:6].upper()}'
@@ -118,30 +117,13 @@ def payment_webhook(request):
         payment.order.status = 'ready'
         payment.order.save()
 
-        order = payment.order
-        supplier = order.supplier
-        customer = order.customer
-        items_list = ', '.join(f'{item.product.name} {item.quantity}' for item in order.items.all())
-
-        cust_phone = customer.profile.phone
-        cust_msg = f'Umefanikiwa kulipa TZS {order.total:,.0f} kwa bidhaa za {items_list} kutoka kwa {supplier.business_name}. Order No {order.id} inatayarishwa. Asante kwa ununuzi wako - FaidaYetu'
-        if cust_phone:
-            send_sms(cust_phone, cust_msg)
-        Notification.objects.create(
-            customer=customer,
-            title='Malipo yamekamilika',
-            message=cust_msg,
-        )
-
-        sup_phone = supplier.profile.phone
-        sup_msg = f'Malipo yamethibitishwa. Mteja {customer.profile.user.username} amelipa TZS {order.total:,.0f} kwa bidhaa za {items_list}. Order No {order.id} tafadhali tayarisha bidhaa kwa usafirishaji - FaidaYetu'
-        if sup_phone:
-            send_sms(sup_phone, sup_msg)
-        Notification.objects.create(
-            supplier=supplier,
-            title='Malipo yamekamilika',
-            message=sup_msg,
-        )
+        try:
+            from accounts.notifications import notify_customer, notify_supplier
+            notify_customer(payment.order)
+            notify_supplier(payment.order)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f'Failed to send notifications: {e}')
     elif status_val in ('failed', 'cancelled', 'expired'):
         payment.status = 'failed'
         payment.message = data.get('message', 'Payment failed')

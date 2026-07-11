@@ -7,13 +7,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Notification, Profile, Supplier, Customer, DeliveryPerson, Product, Order
+from .models import Profile, Supplier, Customer, DeliveryPerson, Product, Order
 from deliveries.models import Delivery
 from .cloudinary_utils import upload_image
 from .serializers import (
     UserSerializer, ProfileSerializer, ProfileUpdateSerializer, SupplierSerializer,
     ProductSerializer, OrderSerializer, OrderItemSerializer,
-    DeliveryPersonSerializer, CustomerSerializer, NotificationSerializer,
+    DeliveryPersonSerializer, CustomerSerializer,
 )
 
 class RegisterView(generics.CreateAPIView):
@@ -450,43 +450,72 @@ class DeleteAccountView(APIView):
         return Response({'success': True, 'message': 'Account deleted permanently.'})
 
 
-class SupplierNotificationsView(APIView):
+# --- Notification endpoints ---
+class NotificationListView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    def get(self, request, supplier_id):
-        notifications = Notification.objects.filter(supplier_id=supplier_id)
-        unread_count = notifications.filter(read=False).count()
-        serializer = NotificationSerializer(notifications, many=True)
+    def get(self, request):
+        supplier_id = request.query_params.get('supplier_id')
+        customer_id = request.query_params.get('customer_id')
+        unread_only = request.query_params.get('unread', 'false') == 'true'
+
+        if supplier_id:
+            from .models import Supplier
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                profile = supplier.profile
+            except Supplier.DoesNotExist:
+                return Response({'error': 'Supplier not found'}, status=404)
+        elif customer_id:
+            from .models import Customer
+            try:
+                customer = Customer.objects.get(id=customer_id)
+                profile = customer.profile
+            except Customer.DoesNotExist:
+                return Response({'error': 'Customer not found'}, status=404)
+        elif request.user.is_authenticated:
+            profile = request.user.profile
+        else:
+            return Response({'error': 'Authentication required or supplier_id/customer_id needed'}, status=401)
+
+        from .notifications import get_supplier_notifications
+        qs = get_supplier_notifications(profile, unread_only=unread_only)
+        from .serializers import NotificationSerializer
+        data = NotificationSerializer(qs[:50], many=True).data
+        unread_count = get_supplier_notifications(profile, unread_only=True).count()
         return Response({
-            'notifications': serializer.data,
+            'notifications': data,
             'unread_count': unread_count,
         })
 
-    def patch(self, request, supplier_id):
-        notification_id = request.data.get('notification_id')
-        if notification_id:
-            Notification.objects.filter(id=notification_id, supplier_id=supplier_id).update(read=True)
-        else:
-            Notification.objects.filter(supplier_id=supplier_id, read=False).update(read=True)
-        return Response({'success': True})
 
-
-class CustomerNotificationsView(APIView):
+class MarkNotificationReadView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    def get(self, request, customer_id):
-        notifications = Notification.objects.filter(customer_id=customer_id)
-        unread_count = notifications.filter(read=False).count()
-        serializer = NotificationSerializer(notifications, many=True)
-        return Response({
-            'notifications': serializer.data,
-            'unread_count': unread_count,
-        })
-
-    def patch(self, request, customer_id):
-        notification_id = request.data.get('notification_id')
-        if notification_id:
-            Notification.objects.filter(id=notification_id, customer_id=customer_id).update(read=True)
+    def patch(self, request, pk):
+        if request.user.is_authenticated:
+            profile = request.user.profile
         else:
-            Notification.objects.filter(customer_id=customer_id, read=False).update(read=True)
-        return Response({'success': True})
+            return Response({'error': 'Authentication required'}, status=401)
+
+        from .notifications import mark_notification_read
+        notification = mark_notification_read(pk, profile)
+        if not notification:
+            return Response({'error': 'Notification not found'}, status=404)
+
+        from .serializers import NotificationSerializer
+        return Response(NotificationSerializer(notification).data)
+
+
+class MarkAllNotificationsReadView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def patch(self, request):
+        if request.user.is_authenticated:
+            profile = request.user.profile
+        else:
+            return Response({'error': 'Authentication required'}, status=401)
+
+        from .notifications import mark_all_read
+        mark_all_read(profile)
+        return Response({'success': True, 'message': 'All notifications marked as read.'})

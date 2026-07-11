@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Notification, Profile, Supplier, Customer, DeliveryPerson, Product, Order, OrderItem
+from .models import Profile, Supplier, Customer, DeliveryPerson, Product, Order, OrderItem, Notification
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -115,6 +115,14 @@ class OrderSerializer(serializers.ModelSerializer):
         return order
 
 class NotificationSerializer(serializers.ModelSerializer):
+    order_id = serializers.IntegerField(source='order.id', read_only=True, default=None)
+    customer_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Notification
-        fields = '__all__'
+        fields = ['id', 'order_id', 'notification_type', 'title', 'message', 'is_read', 'sms_sent', 'created_at', 'customer_name']
+
+    def get_customer_name(self, obj):
+        if obj.order and obj.order.customer:
+            return obj.order.customer.profile.user.username
+        return None

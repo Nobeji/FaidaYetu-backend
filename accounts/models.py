@@ -132,3 +132,26 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f'{self.product.name} x{self.quantity}'
+
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ('new_order', 'New Order'),
+        ('payment_received', 'Payment Received'),
+        ('order_cancelled', 'Order Cancelled'),
+        ('delivery_update', 'Delivery Update'),
+        ('low_stock', 'Low Stock Alert'),
+    ]
+    recipient = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='notifications')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    sms_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} -> {self.recipient}'
