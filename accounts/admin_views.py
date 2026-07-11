@@ -77,7 +77,8 @@ class DemandAnalysisView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        orders = Order.objects.filter(status='delivered')
+        # Use ALL orders for demand analysis (not just delivered)
+        orders = Order.objects.all()
         total = orders.count()
 
         most_ordered_product = OrderItem.objects.values('product__name').annotate(
