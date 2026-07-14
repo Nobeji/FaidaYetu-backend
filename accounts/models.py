@@ -196,6 +196,7 @@ class TAMSurvey(models.Model):
     perceived_ease_of_use = models.IntegerField(default=0)
     behavioral_intention = models.IntegerField(default=0)
     actual_usage = models.IntegerField(default=0)
+    user_role = models.CharField(max_length=20, blank=True, default='customer')
     comments = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
