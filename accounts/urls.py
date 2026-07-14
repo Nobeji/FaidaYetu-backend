@@ -46,6 +46,9 @@ urlpatterns = [
     path('api/admin/route-comparison/', admin_views.RouteComparisonView.as_view(), name='admin-route-comparison'),
     path('api/admin/usability-metrics/', admin_views.UsabilityMetricsView.as_view(), name='admin-usability-metrics'),
     path('api/admin/system-impact/', admin_views.SystemImpactView.as_view(), name='admin-system-impact'),
+    path('api/admin/tam-survey/', admin_views.TAMSurveyView.as_view(), name='admin-tam-survey'),
+    path('api/admin/sus-survey/', admin_views.SUSSurveyView.as_view(), name='admin-sus-survey'),
+    path('api/admin/spatial-accuracy/', admin_views.SpatialAccuracyView.as_view(), name='admin-spatial-accuracy'),
     path('api/admin/<str:model_type>/', admin_views.AdminListView.as_view(), name='admin-list'),
 
     path('api/dashboard/supplier/<int:supplier_id>/', views.SupplierDashboardView.as_view(), name='supplier-dashboard'),

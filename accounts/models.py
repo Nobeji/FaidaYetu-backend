@@ -188,3 +188,47 @@ class SystemPerformance(models.Model):
 
     def __str__(self):
         return f'{self.metric_name} ({self.period}): {self.metric_value} {self.unit}'
+
+
+class TAMSurvey(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tam_surveys', null=True, blank=True)
+    perceived_usefulness = models.IntegerField(default=0)
+    perceived_ease_of_use = models.IntegerField(default=0)
+    behavioral_intention = models.IntegerField(default=0)
+    actual_usage = models.IntegerField(default=0)
+    comments = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'TAM Survey - {self.user or "anon"} - PU:{self.perceived_usefulness} PEOU:{self.perceived_ease_of_use}'
+
+
+class SUSSurvey(models.Model):
+    q1 = models.IntegerField(default=3)
+    q2 = models.IntegerField(default=3)
+    q3 = models.IntegerField(default=3)
+    q4 = models.IntegerField(default=3)
+    q5 = models.IntegerField(default=3)
+    q6 = models.IntegerField(default=3)
+    q7 = models.IntegerField(default=3)
+    q8 = models.IntegerField(default=3)
+    q9 = models.IntegerField(default=3)
+    q10 = models.IntegerField(default=3)
+    user_role = models.CharField(max_length=20, blank=True, default='customer')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sus_surveys', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def calculate_score(self):
+        odd_scores = self.q1 + self.q3 + self.q5 + self.q7 + self.q9
+        even_scores = self.q2 + self.q4 + self.q6 + self.q8 + self.q10
+        raw = (odd_scores - 5) + (25 - even_scores)
+        return round(raw * 2.5, 1)
+
+    def __str__(self):
+        return f'SUS Score: {self.calculate_score()} - {self.user_role}'
