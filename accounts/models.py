@@ -142,3 +142,49 @@ class Notification(models.Model):
 
     def __str__(self):
         return f'{self.title} -> {self.recipient}'
+
+
+class UsabilityMetric(models.Model):
+    ACTION_CHOICES = [
+        ('login', 'Login'),
+        ('signup', 'Signup'),
+        ('browse', 'Browse Products'),
+        ('order', 'Place Order'),
+        ('track', 'Track Delivery'),
+        ('pay', 'Make Payment'),
+        ('inventory', 'Manage Inventory'),
+        ('analytics', 'View Analytics'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='usability_metrics', null=True, blank=True)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    duration_seconds = models.FloatField(default=0)
+    completed = models.BooleanField(default=True)
+    device_type = models.CharField(max_length=50, blank=True, default='desktop')
+    page_url = models.CharField(max_length=500, blank=True)
+    error_message = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f'{self.action} - {self.user or "anon"}'
+
+
+class SystemPerformance(models.Model):
+    PERIOD_CHOICES = [
+        ('before', 'Before System'),
+        ('after', 'After System'),
+    ]
+    metric_name = models.CharField(max_length=100)
+    metric_value = models.FloatField()
+    period = models.CharField(max_length=10, choices=PERIOD_CHOICES)
+    unit = models.CharField(max_length=50, blank=True, default='')
+    description = models.TextField(blank=True)
+    recorded_date = models.DateField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-recorded_date']
+
+    def __str__(self):
+        return f'{self.metric_name} ({self.period}): {self.metric_value} {self.unit}'

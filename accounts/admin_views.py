@@ -4,8 +4,8 @@ from django.db.models.functions import TruncDate, TruncWeek
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
-from .models import Order, OrderItem, Product, Supplier, Customer, DeliveryPerson, Profile
-from deliveries.models import Delivery
+from .models import Order, OrderItem, Product, Supplier, Customer, DeliveryPerson, Profile, UsabilityMetric, SystemPerformance
+from deliveries.models import Delivery, TemperatureLog
 from .prediction import forecast_orders
 
 DAR_LOCTIONS = [
@@ -867,3 +867,494 @@ class SupplierPayoutView(APIView):
             'period_days': days,
             'suppliers': results,
         })
+
+
+# ========== 12. Enhanced Performance Analytics ==========
+
+class EnhancedPerformanceView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        since = datetime.now() - timedelta(days=days)
+
+        completed = Delivery.objects.filter(
+            status='completed', started_at__isnull=False, completed_at__isnull=False,
+            created_at__gte=since
+        )
+
+        delivery_times = []
+        for d in completed:
+            secs = (d.completed_at - d.started_at).total_seconds()
+            delivery_times.append({
+                'id': d.id,
+                'driver': d.delivery_person.profile.user.username,
+                'distance_km': d.distance_km,
+                'time_minutes': round(secs / 60, 1),
+                'date': d.created_at.isoformat(),
+            })
+
+        avg_time_mins = 0
+        if delivery_times:
+            avg_time_mins = round(sum(t['time_minutes'] for t in delivery_times) / len(delivery_times), 1)
+
+        on_time_count = sum(1 for t in delivery_times if t['time_minutes'] <= 120)
+        on_time_rate = round(on_time_count / max(len(delivery_times), 1) * 100, 1)
+
+        avg_distance = 0
+        if delivery_times:
+            avg_distance = round(sum(t['distance_km'] for t in delivery_times) / len(delivery_times), 1)
+
+        speed_per_km = 0
+        if avg_distance > 0 and avg_time_mins > 0:
+            speed_per_km = round(avg_time_mins / avg_distance, 1)
+
+        daily_stats = {}
+        for t in delivery_times:
+            day = t['date'][:10]
+            if day not in daily_stats:
+                daily_stats[day] = {'count': 0, 'total_time': 0, 'total_distance': 0}
+            daily_stats[day]['count'] += 1
+            daily_stats[day]['total_time'] += t['time_minutes']
+            daily_stats[day]['total_distance'] += t['distance_km']
+
+        daily = []
+        for day in sorted(daily_stats.keys()):
+            s = daily_stats[day]
+            daily.append({
+                'date': day,
+                'deliveries': s['count'],
+                'avg_time': round(s['total_time'] / s['count'], 1),
+                'total_distance': round(s['total_distance'], 1),
+            })
+
+        return Response({
+            'summary': {
+                'total_deliveries': len(delivery_times),
+                'avg_delivery_time_mins': avg_time_mins,
+                'on_time_rate': f'{on_time_rate}%',
+                'avg_distance_km': avg_distance,
+                'avg_speed_per_km': f'{speed_per_km} min/km',
+            },
+            'daily': daily,
+            'deliveries': delivery_times[:50],
+        })
+
+
+# ========== 13. Cold Chain Tracking ==========
+
+class ColdChainTrackingView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        delivery_id = request.query_params.get('delivery_id')
+        if delivery_id:
+            logs = TemperatureLog.objects.filter(delivery_id=delivery_id).order_by('-timestamp')
+            data = [{
+                'id': l.id,
+                'temperature': l.temperature,
+                'lat': l.location_lat,
+                'lng': l.location_lng,
+                'is_alert': l.is_alert,
+                'timestamp': l.timestamp.isoformat(),
+            } for l in logs]
+
+            alerts = [l for l in data if l['is_alert']]
+            temps = [l['temperature'] for l in data]
+            return Response({
+                'delivery_id': delivery_id,
+                'logs': data,
+                'alerts': alerts,
+                'stats': {
+                    'avg_temp': round(sum(temps) / max(len(temps), 1), 1),
+                    'min_temp': min(temps) if temps else 0,
+                    'max_temp': max(temps) if temps else 0,
+                    'alert_count': len(alerts),
+                    'total_readings': len(temps),
+                },
+            })
+
+        all_deliveries = Delivery.objects.filter(
+            status__in=['in_transit', 'picked_up']
+        ).select_related('delivery_person__profile__user')
+
+        active = []
+        for d in all_deliveries:
+            latest_temp = d.temperature_logs.first()
+            active.append({
+                'delivery_id': d.id,
+                'driver': d.delivery_person.profile.user.username,
+                'status': d.status,
+                'distance_km': d.distance_km,
+                'current_temp': latest_temp.temperature if latest_temp else None,
+                'has_alert': latest_temp.is_alert if latest_temp else False,
+                'last_reading': latest_temp.timestamp.isoformat() if latest_temp else None,
+            })
+
+        recent_alerts = TemperatureLog.objects.filter(
+            is_alert=True, created_at__gte=datetime.now() - timedelta(days=7)
+        ).select_related('delivery__delivery_person__profile__user')[:20]
+
+        alerts_list = [{
+            'delivery_id': a.delivery_id,
+            'driver': a.delivery.delivery_person.profile.user.username,
+            'temperature': a.temperature,
+            'timestamp': a.timestamp.isoformat(),
+        } for a in recent_alerts]
+
+        all_temps = TemperatureLog.objects.filter(
+            created_at__gte=datetime.now() - timedelta(days=30)
+        )
+        temp_values = [t.temperature for t in all_temps]
+        avg_temp = round(sum(temp_values) / max(len(temp_values), 1), 1) if temp_values else 0
+        alert_count = all_temps.filter(is_alert=True).count()
+
+        return Response({
+            'active_deliveries': active,
+            'recent_alerts': alerts_list,
+            'summary': {
+                'avg_temperature': avg_temp,
+                'total_alerts_30d': alert_count,
+                'total_readings_30d': len(temp_values),
+                'compliance_rate': f'{round((1 - alert_count / max(len(temp_values), 1)) * 100, 1)}%',
+            },
+        })
+
+    def post(self, request):
+        delivery_id = request.data.get('delivery_id')
+        temperature = request.data.get('temperature')
+        lat = request.data.get('lat')
+        lng = request.data.get('lng')
+
+        if not delivery_id or temperature is None:
+            return Response({'error': 'delivery_id and temperature required'}, status=400)
+
+        try:
+            delivery = Delivery.objects.get(id=delivery_id)
+        except Delivery.DoesNotExist:
+            return Response({'error': 'Delivery not found'}, status=404)
+
+        is_alert = float(temperature) > 8.0 or float(temperature) < 0.0
+        log = TemperatureLog.objects.create(
+            delivery=delivery,
+            temperature=float(temperature),
+            location_lat=lat,
+            location_lng=lng,
+            is_alert=is_alert,
+        )
+
+        return Response({
+            'id': log.id,
+            'temperature': log.temperature,
+            'is_alert': log.is_alert,
+            'timestamp': log.timestamp.isoformat(),
+        }, status=201)
+
+
+# ========== 14. Route Comparison (NN vs Genetic Algorithm) ==========
+
+class RouteComparisonView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        pending = Order.objects.filter(status='ready', delivery__isnull=True).select_related('supplier')
+        if not pending:
+            return Response({'message': 'No pending deliveries', 'comparison': {}})
+
+        points = []
+        for o in pending:
+            lat = o.supplier.profile.lat
+            lng = o.supplier.profile.lng
+            points.append({
+                'order_id': o.id,
+                'customer': o.customer.profile.user.username,
+                'supplier': o.supplier.business_name,
+                'lat': float(lat or -6.7924),
+                'lng': float(lng or 39.2083),
+                'address': o.delivery_address,
+            })
+
+        start_lat = float(request.GET.get('lat', -6.7924))
+        start_lng = float(request.GET.get('lng', 39.2083))
+
+        def geo_dist(lat1, lng1, lat2, lng2):
+            return ((lat1 - lat2)**2 + (lng1 - lng2)**2)**0.5 * 111
+
+        def calc_total_distance(route, start):
+            total = 0
+            prev = start
+            for p in route:
+                total += geo_dist(prev['lat'], prev['lng'], p['lat'], p['lng'])
+                prev = p
+            return round(total, 1)
+
+        def nearest_neighbor(points, start):
+            unvisited = list(points)
+            route = []
+            current = start
+            while unvisited:
+                nearest = min(unvisited, key=lambda p: geo_dist(current['lat'], current['lng'], p['lat'], p['lng']))
+                route.append(nearest)
+                unvisited.remove(nearest)
+                current = nearest
+            return route
+
+        import random
+        random.seed(42)
+
+        def genetic_algorithm(points, start, pop_size=50, generations=100, mutation_rate=0.15):
+            if len(points) <= 2:
+                return nearest_neighbor(points, start)
+
+            def create_individual():
+                ind = list(points)
+                random.shuffle(ind)
+                return ind
+
+            def fitness(individual):
+                return calc_total_distance(individual, start)
+
+            population = [create_individual() for _ in range(pop_size)]
+            best = min(population, key=fitness)
+
+            for gen in range(generations):
+                population.sort(key=fitness)
+                new_pop = population[:pop_size // 2]
+
+                while len(new_pop) < pop_size:
+                    p1, p2 = random.sample(new_pop[:pop_size // 3], 2)
+                    child = ordered_crossover(p1, p2)
+                    if random.random() < mutation_rate:
+                        i, j = random.sample(range(len(child)), 2)
+                        child[i], child[j] = child[j], child[i]
+                    new_pop.append(child)
+
+                population = new_pop
+                current_best = min(population, key=fitness)
+                if fitness(current_best) < fitness(best):
+                    best = current_best
+
+            return best
+
+        def ordered_crossover(p1, p2):
+            size = len(p1)
+            start_idx = random.randint(0, size - 2)
+            end_idx = random.randint(start_idx + 1, size - 1)
+            child = [None] * size
+            child[start_idx:end_idx + 1] = p1[start_idx:end_idx + 1]
+            fill = [g for g in p2 if g not in child]
+            idx = 0
+            for i in range(size):
+                if child[i] is None:
+                    child[i] = fill[idx]
+                    idx += 1
+            return child
+
+        start = {'lat': start_lat, 'lng': start_lng}
+
+        nn_route = nearest_neighbor(points, start)
+        nn_distance = calc_total_distance(nn_route, start)
+
+        ga_route = genetic_algorithm(points, start)
+        ga_distance = calc_total_distance(ga_route, start)
+
+        improvement = 0
+        if nn_distance > 0:
+            improvement = round((nn_distance - ga_distance) / nn_distance * 100, 1)
+
+        return Response({
+            'nearest_neighbor': {
+                'route': [{'order_id': r['order_id'], 'customer': r['customer'], 'supplier': r['supplier'], 'lat': r['lat'], 'lng': r['lng']} for r in nn_route],
+                'total_distance_km': nn_distance,
+                'stop_count': len(nn_route),
+            },
+            'genetic_algorithm': {
+                'route': [{'order_id': r['order_id'], 'customer': r['customer'], 'supplier': r['supplier'], 'lat': r['lat'], 'lng': r['lng']} for r in ga_route],
+                'total_distance_km': ga_distance,
+                'stop_count': len(ga_route),
+            },
+            'comparison': {
+                'nn_distance': nn_distance,
+                'ga_distance': ga_distance,
+                'improvement_pct': improvement,
+                'saved_km': round(nn_distance - ga_distance, 1),
+            },
+            'start': start,
+        })
+
+
+# ========== 15. Usability Metrics ==========
+
+class UsabilityMetricsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        since = datetime.now() - timedelta(days=days)
+
+        metrics = UsabilityMetric.objects.filter(timestamp__gte=since)
+
+        action_counts = {}
+        for m in metrics:
+            action_counts[m.action] = action_counts.get(m.action, 0) + 1
+
+        completion_rates = {}
+        for m in metrics:
+            if m.action not in completion_rates:
+                completion_rates[m.action] = {'total': 0, 'completed': 0}
+            completion_rates[m.action]['total'] += 1
+            if m.completed:
+                completion_rates[m.action]['completed'] += 1
+
+        rates = {}
+        for action, data in completion_rates.items():
+            rates[action] = round(data['completed'] / max(data['total'], 1) * 100, 1)
+
+        avg_durations = {}
+        for m in metrics:
+            if m.duration_seconds > 0:
+                if m.action not in avg_durations:
+                    avg_durations[m.action] = []
+                avg_durations[m.action].append(m.duration_seconds)
+
+        avg_dur = {}
+        for action, durations in avg_durations.items():
+            avg_dur[action] = round(sum(durations) / len(durations), 1)
+
+        device_counts = {}
+        for m in metrics:
+            device = m.device_type or 'unknown'
+            device_counts[device] = device_counts.get(device, 0) + 1
+
+        daily_active = metrics.values('user').distinct().count()
+        daily_logins = metrics.filter(action='login').count()
+        daily_signups = metrics.filter(action='signup').count()
+
+        errors = metrics.filter(completed=False).count()
+        total_actions = metrics.count()
+        success_rate = round((total_actions - errors) / max(total_actions, 1) * 100, 1)
+
+        daily_activity = metrics.annotate(
+            date=TruncDate('timestamp')
+        ).values('date').annotate(
+            count=Count('id'),
+            unique_users=Count('user', distinct=True),
+        ).order_by('date')
+
+        return Response({
+            'summary': {
+                'total_actions': total_actions,
+                'unique_users': daily_active,
+                'total_logins': daily_logins,
+                'total_signups': daily_signups,
+                'success_rate': f'{success_rate}%',
+                'error_count': errors,
+            },
+            'action_counts': action_counts,
+            'completion_rates': rates,
+            'avg_durations': avg_dur,
+            'device_breakdown': device_counts,
+            'daily_activity': [{
+                'date': d['date'].isoformat() if d['date'] else '',
+                'actions': d['count'],
+                'users': d['unique_users'],
+            } for d in daily_activity],
+        })
+
+    def post(self, request):
+        action = request.data.get('action')
+        if not action:
+            return Response({'error': 'action required'}, status=400)
+
+        user = request.user if request.user.is_authenticated else None
+        metric = UsabilityMetric.objects.create(
+            user=user,
+            action=action,
+            duration_seconds=float(request.data.get('duration_seconds', 0)),
+            completed=request.data.get('completed', True),
+            device_type=request.data.get('device_type', 'desktop'),
+            page_url=request.data.get('page_url', ''),
+            error_message=request.data.get('error_message', ''),
+        )
+
+        return Response({'id': metric.id, 'action': metric.action}, status=201)
+
+
+# ========== 16. System Impact (Before vs After) ==========
+
+class SystemImpactView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        before_metrics = SystemPerformance.objects.filter(period='before')
+        after_metrics = SystemPerformance.objects.filter(period='after')
+
+        before = {}
+        for m in before_metrics:
+            before[m.metric_name] = {'value': m.metric_value, 'unit': m.unit, 'description': m.description}
+        after = {}
+        for m in after_metrics:
+            after[m.metric_name] = {'value': m.metric_value, 'unit': m.unit, 'description': m.description}
+
+        impact = []
+        all_metrics = set(list(before.keys()) + list(after.keys()))
+        for name in all_metrics:
+            b = before.get(name, {}).get('value', 0)
+            a = after.get(name, {}).get('value', 0)
+            change = 0
+            if b > 0:
+                change = round((a - b) / b * 100, 1)
+            impact.append({
+                'metric': name,
+                'before': b,
+                'after': a,
+                'change_pct': change,
+                'unit': after.get(name, {}).get('unit', before.get(name, {}).get('unit', '')),
+                'description': after.get(name, {}).get('description', before.get(name, {}).get('description', '')),
+            })
+
+        total_delivered = Delivery.objects.filter(status='completed').count()
+        total_orders = Order.objects.count()
+        total_revenue = Order.objects.filter(status='delivered').aggregate(s=Sum('total'))['s'] or 0
+
+        completed = Delivery.objects.filter(status='completed', started_at__isnull=False, completed_at__isnull=False)
+        avg_delivery_mins = 0
+        if completed.exists():
+            total_secs = sum(
+                (d.completed_at - d.started_at).total_seconds()
+                for d in completed if d.completed_at and d.started_at
+            )
+            avg_delivery_mins = round(total_secs / completed.count() / 60, 1)
+
+        return Response({
+            'impact_comparison': impact,
+            'current_stats': {
+                'total_orders': total_orders,
+                'total_delivered': total_delivered,
+                'total_revenue': float(total_revenue),
+                'avg_delivery_minutes': avg_delivery_mins,
+                'delivery_rate': f'{round(total_delivered / max(total_orders, 1) * 100, 1)}%',
+            },
+            'before_metrics': before,
+            'after_metrics': after,
+        })
+
+    def post(self, request):
+        metric_name = request.data.get('metric_name')
+        metric_value = request.data.get('metric_value')
+        period = request.data.get('period')
+        unit = request.data.get('unit', '')
+        description = request.data.get('description', '')
+
+        if not metric_name or metric_value is None or not period:
+            return Response({'error': 'metric_name, metric_value, and period required'}, status=400)
+
+        perf = SystemPerformance.objects.create(
+            metric_name=metric_name,
+            metric_value=float(metric_value),
+            period=period,
+            unit=unit,
+            description=description,
+        )
+
+        return Response({'id': perf.id, 'metric_name': perf.metric_name, 'period': perf.period}, status=201)

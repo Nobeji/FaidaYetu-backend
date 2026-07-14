@@ -28,3 +28,18 @@ class DeliveryLog(models.Model):
 
     class Meta:
         ordering = ['timestamp']
+
+
+class TemperatureLog(models.Model):
+    delivery = models.ForeignKey(Delivery, on_delete=models.CASCADE, related_name='temperature_logs')
+    temperature = models.FloatField()
+    location_lat = models.FloatField(null=True, blank=True)
+    location_lng = models.FloatField(null=True, blank=True)
+    is_alert = models.BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f'Temp {self.temperature}°C - Delivery #{self.delivery.id}'
