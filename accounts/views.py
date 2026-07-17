@@ -370,19 +370,45 @@ class AssignDeliveryView(APIView):
 
     def post(self, request, order_id):
         delivery_person_id = request.data.get('delivery_person_id')
-        if not delivery_person_id:
-            return Response({'error': 'delivery_person_id required'}, status=400)
         try:
             order = Order.objects.get(id=order_id)
         except Order.DoesNotExist:
             return Response({'error': 'Order not found'}, status=404)
         if order.delivery:
             return Response({'error': 'Order already has a delivery assigned'}, status=400)
-        try:
-            dp = DeliveryPerson.objects.get(id=delivery_person_id)
-        except DeliveryPerson.DoesNotExist:
-            return Response({'error': 'Delivery person not found'}, status=404)
+
         from math import radians, sin, cos, sqrt, asin
+
+        if delivery_person_id:
+            try:
+                dp = DeliveryPerson.objects.get(id=delivery_person_id)
+            except DeliveryPerson.DoesNotExist:
+                return Response({'error': 'Delivery person not found'}, status=404)
+        else:
+            s_lat = order.supplier.profile.lat or -6.7924
+            s_lng = order.supplier.profile.lng or 39.2083
+            c_lat = order.delivery_lat or -6.7924
+            c_lng = order.delivery_lng or 39.2083
+            mid_lat = (s_lat + c_lat) / 2
+            mid_lng = (s_lng + c_lng) / 2
+            radius = float(request.data.get('radius', 50))
+            candidates = DeliveryPerson.objects.filter(status='online')
+            best_dp = None
+            best_dist = float('inf')
+            for cand in candidates:
+                dp_lat = cand.profile.lat or -6.7924
+                dp_lng = cand.profile.lng or 39.2083
+                dlat = radians(dp_lat - mid_lat)
+                dlng = radians(dp_lng - mid_lng)
+                a = sin(dlat / 2) ** 2 + cos(radians(mid_lat)) * cos(radians(dp_lat)) * sin(dlng / 2) ** 2
+                dist = 6371 * 2 * asin(sqrt(a))
+                if dist <= radius and dist < best_dist:
+                    best_dist = dist
+                    best_dp = cand
+            if not best_dp:
+                return Response({'error': 'No available drivers nearby. Try again later.'}, status=404)
+            dp = best_dp
+
         s_lat = order.supplier.profile.lat or -6.7924
         s_lng = order.supplier.profile.lng or 39.2083
         c_lat = order.delivery_lat or -6.7924
@@ -402,6 +428,11 @@ class AssignDeliveryView(APIView):
         order.save()
         dp.status = 'busy'
         dp.save()
+
+        from .notifications import notify_delivery_person, notify_customer
+        notify_delivery_person(order, dp)
+        notify_customer(order)
+
         return Response(OrderSerializer(order).data, status=201)
 
 
@@ -470,6 +501,7 @@ class NotificationListView(APIView):
     def get(self, request):
         supplier_id = request.query_params.get('supplier_id')
         customer_id = request.query_params.get('customer_id')
+        delivery_person_id = request.query_params.get('delivery_person_id')
         unread_only = request.query_params.get('unread', 'false') == 'true'
 
         if supplier_id:
@@ -488,16 +520,26 @@ class NotificationListView(APIView):
                 profile_type = 'customer'
             except Customer.DoesNotExist:
                 return Response({'error': 'Customer not found'}, status=404)
+        elif delivery_person_id:
+            try:
+                dp = DeliveryPerson.objects.get(id=delivery_person_id)
+                profile = dp.profile
+                profile_type = 'delivery'
+            except DeliveryPerson.DoesNotExist:
+                return Response({'error': 'Delivery person not found'}, status=404)
         elif request.user.is_authenticated:
             profile = request.user.profile
             profile_type = 'supplier' if profile.role == 'supplier' else 'customer'
         else:
             return Response({'error': 'Authentication required or supplier_id/customer_id needed'}, status=401)
 
-        from .notifications import get_supplier_notifications, get_customer_notifications
+        from .notifications import get_supplier_notifications, get_customer_notifications, get_delivery_person_notifications
         if profile_type == 'supplier':
             qs = get_supplier_notifications(profile, unread_only=unread_only)
             unread_count = get_supplier_notifications(profile, unread_only=True).count()
+        elif profile_type == 'delivery':
+            qs = get_delivery_person_notifications(profile, unread_only=unread_only)
+            unread_count = get_delivery_person_notifications(profile, unread_only=True).count()
         else:
             qs = get_customer_notifications(profile, unread_only=unread_only)
             unread_count = get_customer_notifications(profile, unread_only=True).count()
@@ -539,3 +581,19 @@ class MarkAllNotificationsReadView(APIView):
         from .notifications import mark_all_read
         mark_all_read(profile)
         return Response({'success': True, 'message': 'All notifications marked as read.'})
+
+
+class DriverStatusView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def patch(self, request, delivery_person_id):
+        try:
+            dp = DeliveryPerson.objects.get(id=delivery_person_id)
+        except DeliveryPerson.DoesNotExist:
+            return Response({'error': 'Delivery person not found'}, status=404)
+        new_status = request.data.get('status')
+        if new_status not in ('online', 'offline', 'busy'):
+            return Response({'error': 'Invalid status. Must be online, offline, or busy'}, status=400)
+        dp.status = new_status
+        dp.save()
+        return Response({'status': dp.status})

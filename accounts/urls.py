@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/orders/<int:order_id>/assign-delivery/', views.AssignDeliveryView.as_view(), name='assign-delivery'),
 
     path('api/delivery-persons/', views.DeliveryPersonListView.as_view(), name='delivery-person-list'),
+    path('api/delivery-persons/<int:delivery_person_id>/status/', views.DriverStatusView.as_view(), name='driver-status'),
 
     # Admin endpoints
     path('api/admin/dashboard/', admin_views.AdminDashboardView.as_view(), name='admin-dashboard'),

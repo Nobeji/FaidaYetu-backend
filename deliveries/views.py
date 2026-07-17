@@ -41,9 +41,15 @@ class DeliveryDetailView(views.APIView):
 
     def patch(self, request, pk):
         delivery = Delivery.objects.get(pk=pk)
+        new_status = request.data.get('status')
         serializer = DeliverySerializer(delivery, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            if new_status == 'completed':
+                dp = delivery.delivery_person
+                dp.status = 'online'
+                dp.total_routes += 1
+                dp.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 

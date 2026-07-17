@@ -117,6 +117,51 @@ def get_customer_notifications(customer_profile, unread_only=False):
     return qs
 
 
+def get_delivery_person_notifications(delivery_person_profile, unread_only=False):
+    qs = Notification.objects.filter(recipient=delivery_person_profile)
+    if unread_only:
+        qs = qs.filter(is_read=False)
+    return qs
+
+
+def notify_delivery_person(order, delivery_person):
+    profile = delivery_person.profile
+    cust = order.customer
+    cust_phone = cust.profile.phone
+    delivery_addr = order.delivery_address or 'Haijabainishwa'
+
+    title = 'Umepewa kazi mpya ya usafirishaji'
+    message = (
+        f'Umeteuliwa kusafirisha amri No {order.id}. '
+        f'Mteja: {cust.profile.user.username} ({cust_phone}). '
+        f'Mahala pa kuchukua: {order.supplier.business_name}. '
+        f'Mahala pa kuweka: {delivery_addr}. '
+        f'Jumla: TZS {order.total:,.0f}. '
+        f'Tafadhali chukua bidhaa haraka iwezekanavyo - FaidaYetu'
+    )
+
+    notification = Notification.objects.create(
+        recipient=profile,
+        order=order,
+        notification_type='delivery_update',
+        title=title,
+        message=message,
+    )
+
+    try:
+        from .sms_service import SmsService
+        sms = SmsService()
+        phone = profile.phone
+        if phone:
+            sent = sms.send(phone, message)
+            notification.sms_sent = sent
+            notification.save()
+    except Exception:
+        pass
+
+    return notification
+
+
 def mark_notification_read(notification_id, profile):
     try:
         notification = Notification.objects.get(id=notification_id, recipient=profile)
